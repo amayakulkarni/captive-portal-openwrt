@@ -1,0 +1,4 @@
+[
+  { "firstName": "office", "deviceName": "example-camera",  "mac": "02:00:00:00:10:01", "ip": "192.168.75.2", "type": "iot" },
+  { "firstName": "living-room", "deviceName": "example-tv", "mac": "02:00:00:00:10:02", "ip": "192.168.125.2", "type": "native_iot" }
+]

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{NETWORK_NAME}} | Central Admin</title>
+    <style>
+        :root {
+            --primary: #26C6DA;
+            --secondary: #E76F51;
+            --bg-dark: #101419;
+            --card-dark: #1E222A;
+            --border-dark: #313A46;
+            --text-light: #F0F4F8;
+            --text-gray: #B0BEC5;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: var(--bg-dark); color: var(--text-light); font-family: sans-serif; padding: 20px; }
+        
+        .container { max-width: 1200px; margin: 0 auto; }
+        .card { background-color: var(--card-dark); border: 1px solid var(--border-dark); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 1.5rem; }
+        
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 2px solid var(--border-dark); padding-bottom: 1rem; }
+        header h1 { color: var(--primary); font-style: italic; font-weight: 900; }
+
+        .grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+        @media (min-width: 768px) { .grid { grid-template-columns: 320px 1fr; } }
+
+        .input-field { background: #151921; border: 1px solid var(--border-dark); color: white; border-radius: 0.4rem; padding: 0.6rem; width: 100%; margin-bottom: 0.75rem; font-size: 0.9rem; }
+        .btn-primary { background: var(--primary); color: #101419; border: none; padding: 0.75rem; border-radius: 0.4rem; font-weight: bold; width: 100%; cursor: pointer; }
+        .btn-danger { background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 0.3rem 0.6rem; border-radius: 0.3rem; cursor: pointer; font-size: 0.8rem; }
+        .btn-danger:hover { background: #ef4444; color: white; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th { text-align: left; font-size: 0.75rem; text-transform: uppercase; color: var(--text-gray); border-bottom: 1px solid var(--border-dark); padding-bottom: 0.5rem; padding-right: 10px; }
+        td { padding: 0.75rem 0; border-bottom: 1px solid var(--border-dark); font-size: 0.9rem; padding-right: 10px; }
+        
+        .badge { font-size: 0.7rem; padding: 0.2rem 0.4rem; border-radius: 0.3rem; font-weight: bold; }
+        .badge-guest { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+        .badge-throttled { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .badge-iot { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+
+        #login-screen { position: fixed; inset: 0; background: black; display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div id="login-screen">
+        <div class="card" style="width: 320px;">
+            <h2 style="text-align: center; margin-bottom: 1rem; color: var(--primary);">ADMIN LOGIN</h2>
+            <input type="password" id="admin-key" class="input-field" placeholder="API Key">
+            <button onclick="login()" class="btn-primary">ACCESS DASHBOARD</button>
+        </div>
+    </div>
+
+    <div id="dashboard" class="container hidden">
+        <header>
+            <div>
+                <h1>{{NETWORK_NAME_UPPER}} ADMIN</h1>
+                <p style="font-size: 0.8rem; color: var(--text-gray);">Infrastructure Management</p>
+            </div>
+            <div style="text-align: right">
+                <p style="font-size: 0.7rem; color: var(--text-gray);">DAILY PASSCODE</p>
+                <p id="display-passcode" style="font-size: 1.2rem; font-weight: bold; color: white;">----</p>
+                <a href="#" onclick="logout()" style="color: var(--secondary); font-size: 0.7rem;">Logout</a>
+            </div>
+        </header>
+
+        <div class="grid">
+            <aside>
+                <div class="card">
+                    <h3 style="margin-bottom: 1rem; font-size: 1rem;">Register IoT (Static IP)</h3>
+                    <input type="text" id="iotName" class="input-field" placeholder="Device (e.g. Printer)">
+                    <input type="text" id="iotOwner" class="input-field" placeholder="Owner Name">
+                    <input type="text" id="iotMac" class="input-field" placeholder="MAC Address">
+                    <input type="text" id="iotIp" class="input-field" placeholder="Static IP (Optional)">
+                    <select id="iotType" class="input-field">
+                        <option value="iot">IoT ({{IOT_SUBNET}})</option>
+                        <option value="native_iot">Native IoT ({{NATIVE_IOT_SUBNET}})</option>
+                    </select>
+                    <button onclick="addIoT()" class="btn-primary">ADD DEVICE</button>
+                </div>
+            </aside>
+
+            <main class="card">
+                <h3>Whitelisted Devices</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>User/Device</th>
+                            <th>MAC</th>
+                            <th>Reserved IP</th>
+                            <th>Subnet</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="device-table"></tbody>
+                </table>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        let apiKey = localStorage.getItem('portal_api_key');
+
+        window.onload = () => { if (apiKey) refreshData(true); };
+
+        function login() {
+            apiKey = document.getElementById('admin-key').value;
+            refreshData(true);
+        }
+
+        function logout() {
+            localStorage.removeItem('portal_api_key');
+            location.reload();
+        }
+
+        async function refreshData(isFirstLoad = false) {
+            try {
+                const res = await fetch('/api/devices', { headers: { 'x-api-key': apiKey } });
+                if (!res.ok) throw new Error();
+                
+                if (isFirstLoad) {
+                    localStorage.setItem('portal_api_key', apiKey);
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('dashboard').classList.remove('hidden');
+                }
+
+                const devices = await res.json();
+                renderTable(devices);
+                fetchPasscode();
+            } catch (err) {
+                alert("Auth Failed");
+                console.log(err)
+            }
+        }
+
+        async function fetchPasscode() {
+            const res = await fetch('/api/admin/passcode', { headers: { 'x-api-key': apiKey } });
+            const data = await res.json();
+            console.log(data)
+            document.getElementById('display-passcode').innerText = data.passcode;
+        }
+
+        function renderTable(devices) {
+            const tbody = document.getElementById('device-table');
+            tbody.innerHTML = '';
+            devices.forEach(d => {
+                const tr = document.createElement('tr');
+                console.log(d)
+                tr.innerHTML = `
+                    <td><b>${d.firstName}</b><br><small style="color:var(--text-gray)">${d.deviceName}</small></td>
+                    <td style="font-family:monospace">${d.mac}</td>
+                    <td style="color:var(--primary)">${d.ip || '--'}</td>
+                    <td><span class="badge badge-${d.type.split('_')[0]}">${d.type}</span></td>
+                    <td><button onclick="kick('${d.mac}', '${d.type}')" class="btn-danger">KICK</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function addIoT() {
+            const payload = {
+                firstName: document.getElementById('iotOwner').value,
+                deviceName: document.getElementById('iotName').value,
+                mac: document.getElementById('iotMac').value,
+                ip: document.getElementById('iotIp').value,
+                type: document.getElementById('iotType').value
+            };
+            await fetch('/api/iot/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+                body: JSON.stringify(payload)
+            });
+            refreshData();
+        }
+
+        async function kick(mac, type) {
+            if (!confirm("Revoke access and delete static lease?")) return;
+            await fetch('/api/devices/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+                body: JSON.stringify({ mac, type })
+            });
+            refreshData();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+#!/bin/sh /etc/rc.common
+# Copy to /etc/init.d/captive-portal on the router, then:
+#   chmod +x /etc/init.d/captive-portal
+#   /etc/init.d/captive-portal enable
+#   /etc/init.d/captive-portal start
+
+START=99
+STOP=10
+USE_PROCD=1
+
+APP_DIR="/etc/captive-portal"
+ENV_FILE="$APP_DIR/portal.env"
+NODE_BIN="/usr/bin/node"
+
+start_service() {
+    [ -f "$ENV_FILE" ] || { echo "missing $ENV_FILE (copy config/portal.env.example)" >&2; return 1; }
+    procd_open_instance
+    # app.js reads portal.env itself; PORTAL_ENV_FILE just pins the location.
+    procd_set_param env PORTAL_ENV_FILE="$ENV_FILE"
+    procd_set_param command "$NODE_BIN" "$APP_DIR/app.js"
+    procd_set_param respawn ${respawn_threshold:-3600} ${respawn_timeout:-5} ${respawn_retry:-5}
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_set_param pidfile /var/run/captive-portal.pid
+    procd_close_instance
+}
+
+reload_service() {
+    stop
+    start
+}
